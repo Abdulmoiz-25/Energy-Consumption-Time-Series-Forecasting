@@ -9,6 +9,33 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX, SARIMAXResults
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 # ==============================
+def safe_calculate_metrics(actual_values, forecast_values):
+    """
+    Calculate metrics while handling NaN values by filtering them out.
+    Returns MAE and RMSE, or None if insufficient valid data.
+    """
+    # Convert to numpy arrays and find valid (non-NaN) indices
+    actual_array = np.array(actual_values)
+    forecast_array = np.array(forecast_values)
+    
+    # Find indices where both actual and forecast are not NaN
+    valid_mask = ~(np.isnan(actual_array) | np.isnan(forecast_array))
+    
+    if np.sum(valid_mask) < 2:  # Need at least 2 valid points
+        return None, None
+    
+    # Filter to only valid data points
+    valid_actual = actual_array[valid_mask]
+    valid_forecast = forecast_array[valid_mask]
+    
+    try:
+        mae = mean_absolute_error(valid_actual, valid_forecast)
+        rmse = np.sqrt(mean_squared_error(valid_actual, valid_forecast))
+        return mae, rmse
+    except Exception:
+        return None, None
+
+# ==============================
 # Load Data (from ZIP)
 # ==============================
 @st.cache_data
@@ -224,12 +251,11 @@ if mode == "Single Model":
             else:
                 forecast_values = sarima_series[:len(test)]
                 actual_values = test["Global_active_power"]
-                if not forecast_values.isna().any() and not actual_values.isna().any():
-                    mae = mean_absolute_error(actual_values, forecast_values)
-                    rmse = np.sqrt(mean_squared_error(actual_values, forecast_values))
+                mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
+                if mae is not None and rmse is not None:
                     st.success(f"SARIMA → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
                 else:
-                    st.warning("SARIMA forecast contains NaN values, cannot calculate metrics.")
+                    st.warning("SARIMA forecast contains too many NaN values, cannot calculate reliable metrics.")
                 plt.plot(sarima_series.index, sarima_series.values, label="SARIMA")
                 # plot conf interval if available
                 if not conf_low.empty and not conf_up.empty:
@@ -242,12 +268,11 @@ if mode == "Single Model":
             else:
                 forecast_values = prophet_series[:len(test)]
                 actual_values = test["Global_active_power"]
-                if not forecast_values.isna().any() and not actual_values.isna().any():
-                    mae = mean_absolute_error(actual_values, forecast_values)
-                    rmse = np.sqrt(mean_squared_error(actual_values, forecast_values))
+                mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
+                if mae is not None and rmse is not None:
                     st.success(f"Prophet → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
                 else:
-                    st.warning("Prophet forecast contains NaN values, cannot calculate metrics.")
+                    st.warning("Prophet forecast contains too many NaN values, cannot calculate reliable metrics.")
                 plt.plot(prophet_series.index, prophet_series.values, label="Prophet")
 
         elif selected_model == "XGBoost" and "XGBoost" in models:
@@ -257,12 +282,11 @@ if mode == "Single Model":
             else:
                 forecast_values = xgb_series[:len(test)]
                 actual_values = test["Global_active_power"]
-                if not forecast_values.isna().any() and not actual_values.isna().any():
-                    mae = mean_absolute_error(actual_values, forecast_values)
-                    rmse = np.sqrt(mean_squared_error(actual_values, forecast_values))
+                mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
+                if mae is not None and rmse is not None:
                     st.success(f"XGBoost → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
                 else:
-                    st.warning("XGBoost forecast contains NaN values, cannot calculate metrics.")
+                    st.warning("XGBoost forecast contains too many NaN values, cannot calculate reliable metrics.")
                 plt.plot(xgb_series.index, xgb_series.values, label="XGBoost")
 
         else:
@@ -292,11 +316,9 @@ elif mode == "Compare All Models":
                     plt.fill_between(sarima_series.index, conf_low.values, conf_up.values, alpha=0.15)
                 forecast_values = sarima_series[:len(test)]
                 actual_values = test["Global_active_power"]
-                if not forecast_values.isna().any() and not actual_values.isna().any():
-                    results["SARIMA"] = {
-                        "MAE": mean_absolute_error(actual_values, forecast_values),
-                        "RMSE": np.sqrt(mean_squared_error(actual_values, forecast_values))
-                    }
+                mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
+                if mae is not None and rmse is not None:
+                    results["SARIMA"] = {"MAE": mae, "RMSE": rmse}
 
         # Prophet
         if "Prophet" in models:
@@ -305,11 +327,9 @@ elif mode == "Compare All Models":
                 plt.plot(prophet_series.index, prophet_series.values, label="Prophet")
                 forecast_values = prophet_series[:len(test)]
                 actual_values = test["Global_active_power"]
-                if not forecast_values.isna().any() and not actual_values.isna().any():
-                    results["Prophet"] = {
-                        "MAE": mean_absolute_error(actual_values, forecast_values),
-                        "RMSE": np.sqrt(mean_squared_error(actual_values, forecast_values))
-                    }
+                mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
+                if mae is not None and rmse is not None:
+                    results["Prophet"] = {"MAE": mae, "RMSE": rmse}
 
         # XGBoost
         if "XGBoost" in models:
@@ -318,11 +338,9 @@ elif mode == "Compare All Models":
                 plt.plot(xgb_series.index, xgb_series.values, label="XGBoost")
                 forecast_values = xgb_series[:len(test)]
                 actual_values = test["Global_active_power"]
-                if not forecast_values.isna().any() and not actual_values.isna().any():
-                    results["XGBoost"] = {
-                        "MAE": mean_absolute_error(actual_values, forecast_values),
-                        "RMSE": np.sqrt(mean_squared_error(actual_values, forecast_values))
-                    }
+                mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
+                if mae is not None and rmse is not None:
+                    results["XGBoost"] = {"MAE": mae, "RMSE": rmse}
 
         if not results:
             st.error("No models produced valid forecasts.")
