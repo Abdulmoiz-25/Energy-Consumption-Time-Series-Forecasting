@@ -27,39 +27,29 @@ def load_data():
         st.error(f"{extracted_file} not found inside ZIP.")
         return pd.DataFrame()
 
-    try:
-        df = pd.read_csv(
-            extracted_file,
-            sep=";",
-            parse_dates={"datetime": ["Date", "Time"]},
-            infer_datetime_format=True,
-            low_memory=False,
-            na_values=["?"]
-        )
-    except Exception as e:
-        st.error(f"Error reading CSV: {e}")
-        return pd.DataFrame()
-
-    if df.empty:
-        st.error("Loaded CSV is empty.")
-        return df
+    df = pd.read_csv(
+        extracted_file,
+        sep=";",
+        parse_dates={"datetime": ["Date", "Time"]},
+        infer_datetime_format=True,
+        low_memory=False,
+        na_values=["?"]
+    )
 
     df.set_index("datetime", inplace=True)
     df = df.apply(pd.to_numeric, errors="coerce")
     df = df.asfreq("H").fillna(method="ffill")
     return df
 
-# Load dataset
 data = load_data()
 if data.empty:
     st.stop()
 
 # ==============================
-# Load / Fast SARIMA
+# SARIMA
 # ==============================
 @st.cache_resource
 def get_sarima_model(data, seasonal_order=(1,1,1,24), order=(1,1,1)):
-    """Load SARIMA; if fails, fit on last 30 days of data silently."""
     try:
         model = SARIMAXResults.load("sarima_model.pkl")
         _ = model.get_forecast(steps=1)
@@ -73,7 +63,7 @@ def get_sarima_model(data, seasonal_order=(1,1,1,24), order=(1,1,1)):
         return sarima_model_fit
 
 # ==============================
-# Load Other Models
+# Load Models
 # ==============================
 @st.cache_resource
 def load_models():
@@ -93,38 +83,49 @@ def load_models():
 models = load_models()
 
 # ==============================
-# Forecasting Functions
+# Forecast Functions
 # ==============================
 def forecast_sarima(model, steps):
-    try:
-        forecast = model.get_forecast(steps=steps)
-        return forecast.predicted_mean, forecast.conf_int()
-    except Exception as e:
-        st.error(f"SARIMA forecast error: {e}")
-        return pd.Series(), pd.DataFrame()
+    forecast = model.get_forecast(steps=steps)
+    return forecast.predicted_mean, forecast.conf_int()
 
 def forecast_prophet(model, steps):
-    try:
-        future = model.make_future_dataframe(periods=steps, freq="H")
-        forecast = model.predict(future)
-        return forecast.tail(steps)[["ds", "yhat"]]
-    except Exception as e:
-        st.error(f"Prophet forecast error: {e}")
-        return pd.DataFrame()
+    future = model.make_future_dataframe(periods=steps, freq="H")
+    forecast = model.predict(future)
+    return forecast.tail(steps)[["ds", "yhat"]]
 
 def forecast_xgb(model, steps, df):
-    try:
-        last_time = df.index[-1]
-        future_idx = pd.date_range(start=last_time, periods=steps+1, freq="H")[1:]
-        features = pd.DataFrame({
-            "hour": future_idx.hour,
-            "weekday": future_idx.weekday
-        })
-        preds = model.predict(features)
-        return pd.Series(preds, index=future_idx)
-    except Exception as e:
-        st.error(f"XGBoost forecast error: {e}")
-        return pd.Series()
+    last_time = df.index[-1]
+    future_idx = pd.date_range(start=last_time, periods=steps+1, freq="H")[1:]
+
+    # Feature engineering
+    hour = future_idx.hour
+    dayofweek = future_idx.dayofweek
+    is_weekend = (dayofweek >= 5).astype(int)
+    hour_sin = np.sin(2 * np.pi * hour / 24)
+    hour_cos = np.cos(2 * np.pi * hour / 24)
+    dow_sin = np.sin(2 * np.pi * dayofweek / 7)
+    dow_cos = np.cos(2 * np.pi * dayofweek / 7)
+
+    lag_1 = df["Global_active_power"].shift(1).reindex(future_idx, method='ffill')
+    lag_2 = df["Global_active_power"].shift(2).reindex(future_idx, method='ffill')
+    lag_24 = df["Global_active_power"].shift(24).reindex(future_idx, method='ffill')
+
+    features = pd.DataFrame({
+        "hour": hour,
+        "dayofweek": dayofweek,
+        "is_weekend": is_weekend,
+        "hour_sin": hour_sin,
+        "hour_cos": hour_cos,
+        "dow_sin": dow_sin,
+        "dow_cos": dow_cos,
+        "lag_1": lag_1.values,
+        "lag_2": lag_2.values,
+        "lag_24": lag_24.values
+    }, index=future_idx)
+
+    preds = model.predict(features)
+    return pd.Series(preds, index=future_idx)
 
 # ==============================
 # Streamlit UI
@@ -147,8 +148,6 @@ if mode == "Single Model":
     if st.button("Run Forecast"):
         if selected_model == "SARIMA" and "SARIMA" in models:
             preds, conf_int = forecast_sarima(models["SARIMA"], horizon)
-            if preds.empty:
-                st.stop()
             forecast_idx = pd.date_range(start=history.index[-1], periods=horizon+1, freq="H")[1:]
             forecast_series = pd.Series(preds.values, index=forecast_idx)
 
@@ -161,13 +160,10 @@ if mode == "Single Model":
             plt.fill_between(forecast_series.index, conf_int.iloc[:,0], conf_int.iloc[:,1], color="gray", alpha=0.3)
             plt.legend()
             st.pyplot(plt)
-
             st.success(f"SARIMA → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
 
         elif selected_model == "Prophet" and "Prophet" in models:
             forecast = forecast_prophet(models["Prophet"], horizon)
-            if forecast.empty:
-                st.stop()
             forecast.set_index("ds", inplace=True)
 
             mae = mean_absolute_error(test["Global_active_power"], forecast["yhat"][:len(test)])
@@ -178,13 +174,10 @@ if mode == "Single Model":
             plt.plot(forecast.index, forecast["yhat"], label="Forecast")
             plt.legend()
             st.pyplot(plt)
-
             st.success(f"Prophet → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
 
         elif selected_model == "XGBoost" and "XGBoost" in models:
             preds = forecast_xgb(models["XGBoost"], horizon, data)
-            if preds.empty:
-                st.stop()
 
             mae = mean_absolute_error(test["Global_active_power"], preds[:len(test)])
             rmse = np.sqrt(mean_squared_error(test["Global_active_power"], preds[:len(test)]))
@@ -194,11 +187,7 @@ if mode == "Single Model":
             plt.plot(preds.index, preds, label="Forecast")
             plt.legend()
             st.pyplot(plt)
-
             st.success(f"XGBoost → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
-
-        else:
-            st.error("Selected model is not available.")
 
 # ==============================
 # Compare All Models
@@ -206,58 +195,42 @@ if mode == "Single Model":
 elif mode == "Compare All Models":
     if st.button("Run Comparison"):
         results = {}
-
-        # SARIMA
         sarima_preds = None
+        forecast = None
+        xgb_preds = None
+
         if "SARIMA" in models:
             preds, _ = forecast_sarima(models["SARIMA"], horizon)
-            if not preds.empty:
-                forecast_idx = pd.date_range(start=history.index[-1], periods=horizon+1, freq="H")[1:]
-                sarima_preds = pd.Series(preds.values, index=forecast_idx)
-                results["SARIMA"] = {
-                    "MAE": mean_absolute_error(test["Global_active_power"], sarima_preds[:len(test)]),
-                    "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], sarima_preds[:len(test)]))
-                }
+            forecast_idx = pd.date_range(start=history.index[-1], periods=horizon+1, freq="H")[1:]
+            sarima_preds = pd.Series(preds.values, index=forecast_idx)
+            results["SARIMA"] = {
+                "MAE": mean_absolute_error(test["Global_active_power"], sarima_preds[:len(test)]),
+                "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], sarima_preds[:len(test)]))
+            }
 
-        # Prophet
-        forecast = None
         if "Prophet" in models:
             forecast = forecast_prophet(models["Prophet"], horizon)
-            if not forecast.empty:
-                forecast.set_index("ds", inplace=True)
-                results["Prophet"] = {
-                    "MAE": mean_absolute_error(test["Global_active_power"], forecast["yhat"][:len(test)]),
-                    "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], forecast["yhat"][:len(test)]))
-                }
+            forecast.set_index("ds", inplace=True)
+            results["Prophet"] = {
+                "MAE": mean_absolute_error(test["Global_active_power"], forecast["yhat"][:len(test)]),
+                "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], forecast["yhat"][:len(test)]))
+            }
 
-        # XGBoost
-        xgb_preds = None
         if "XGBoost" in models:
             xgb_preds = forecast_xgb(models["XGBoost"], horizon, data)
-            if not xgb_preds.empty:
-                results["XGBoost"] = {
-                    "MAE": mean_absolute_error(test["Global_active_power"], xgb_preds[:len(test)]),
-                    "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], xgb_preds[:len(test)]))
-                }
+            results["XGBoost"] = {
+                "MAE": mean_absolute_error(test["Global_active_power"], xgb_preds[:len(test)]),
+                "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], xgb_preds[:len(test)]))
+            }
 
-        if not results:
-            st.error("No models produced valid forecasts.")
-            st.stop()
-
-        # Convert to DataFrame
         results_df = pd.DataFrame(results).T
-
-        # Highlight best model (lowest RMSE)
         def highlight_best(s):
             is_min = s == s.min()
             return ['background-color: lightgreen' if v else '' for v in is_min]
-
         styled_df = results_df.style.apply(highlight_best, subset=["RMSE"])
-
         st.subheader("📊 Model Comparison (Last Horizon)")
         st.dataframe(styled_df)
 
-        # Plot Comparison
         plt.figure(figsize=(12,5))
         plt.plot(history.index, history["Global_active_power"], label="Actual", color="black")
         if sarima_preds is not None:
