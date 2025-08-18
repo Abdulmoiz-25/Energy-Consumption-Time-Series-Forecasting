@@ -35,19 +35,38 @@ models = load_models()
 # ==============================
 @st.cache_data
 def load_data():
-    zip_path = "household_power_consumption.zip"
-    csv_name = "household_power_consumption.csv"
+    zip_path = "household power consumption.zip"
+    extracted_file = "household_power_consumption.txt"  # inside the ZIP
 
-    # unzip only if CSV not already extracted
-    if not os.path.exists(csv_name):
+    # unzip only if TXT not already extracted
+    if not os.path.exists(extracted_file):
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(".")
 
-    df = pd.read_csv(csv_name, parse_dates=["datetime"], index_col="datetime")
-    df = df.asfreq("H").fillna(method="ffill")  # hourly resample
+    # Read dataset (semicolon-separated)
+    df = pd.read_csv(
+        extracted_file,
+        sep=";",
+        parse_dates={"datetime": ["Date", "Time"]},  # combine Date+Time
+        infer_datetime_format=True,
+        low_memory=False,
+        na_values=["?"]
+    )
+
+    # Set datetime as index
+    df.set_index("datetime", inplace=True)
+
+    # Convert numeric columns to float (they load as strings sometimes)
+    df = df.apply(pd.to_numeric, errors="coerce")
+
+    # Resample to hourly data and forward-fill missing values
+    df = df.asfreq("H").fillna(method="ffill")
+
     return df
 
+# Load dataset
 data = load_data()
+
 
 # ==============================
 # Forecasting Functions
@@ -204,3 +223,4 @@ elif mode == "Compare All Models":
             plt.plot(xgb_preds.index, xgb_preds, label="XGBoost")
         plt.legend()
         st.pyplot(plt)
+
