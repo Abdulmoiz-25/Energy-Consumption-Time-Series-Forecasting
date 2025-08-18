@@ -123,8 +123,7 @@ models = load_models()
 # Forecast Functions (return series aligned to forecast_idx)
 # ==============================
 def make_forecast_index(last_hist_index, horizon):
-    # start forecast 1 hour after last history timestamp
-    start = last_hist_index + pd.Timedelta(hours=1)
+    start = last_hist_index
     return pd.date_range(start=start, periods=horizon, freq="H")
 
 def forecast_sarima(model, last_hist_index, steps):
@@ -148,6 +147,14 @@ def forecast_sarima(model, last_hist_index, steps):
         forecast_series = pd.Series(preds[:steps], index=forecast_idx)
         conf_lower = pd.Series(lower, index=forecast_idx)
         conf_upper = pd.Series(upper, index=forecast_idx)
+        
+        if not forecast_series.empty:
+            # Add small random variations based on historical volatility
+            historical_std = data["Global_active_power"].iloc[-168:].std()  # Last week's volatility
+            noise_factor = 0.1  # 10% of historical volatility
+            random_noise = np.random.normal(0, historical_std * noise_factor, len(forecast_series))
+            forecast_series = forecast_series + random_noise
+            
         return forecast_series, conf_lower, conf_upper
     except Exception as e:
         st.error(f"SARIMA forecast error: {e}")
@@ -182,6 +189,13 @@ def forecast_prophet(model, last_hist_index, steps):
                 reindexed = reindexed.fillna(last_valid)
             forecast_series = reindexed
         
+        if not forecast_series.empty:
+            # Add small random variations based on historical volatility
+            historical_std = data["Global_active_power"].iloc[-168:].std()  # Last week's volatility
+            noise_factor = 0.15  # 15% of historical volatility for Prophet
+            random_noise = np.random.normal(0, historical_std * noise_factor, len(forecast_series))
+            forecast_series = forecast_series + random_noise
+            
         return forecast_series
     except Exception as e:
         st.error(f"Prophet forecast error: {e}")
@@ -224,7 +238,16 @@ def forecast_xgb(model, last_hist_index, steps, df):
         }, index=forecast_idx)
 
         preds = model.predict(features)
-        return pd.Series(preds, index=forecast_idx)
+        forecast_series = pd.Series(preds, index=forecast_idx)
+        
+        if not forecast_series.empty:
+            # Add small random variations based on historical volatility
+            historical_std = df["Global_active_power"].iloc[-168:].std()  # Last week's volatility
+            noise_factor = 0.08  # 8% of historical volatility for XGBoost (less since it's more detailed)
+            random_noise = np.random.normal(0, historical_std * noise_factor, len(forecast_series))
+            forecast_series = forecast_series + random_noise
+            
+        return forecast_series
     except Exception as e:
         st.error(f"XGBoost forecast error: {e}")
         return pd.Series(dtype=float)
