@@ -55,25 +55,20 @@ if data.empty:
     st.stop()
 
 # ==============================
-# Load / Fast Refit SARIMA
+# Load / Fast SARIMA
 # ==============================
 @st.cache_resource
 def get_sarima_model(data, seasonal_order=(1,1,1,24), order=(1,1,1)):
-    """Load SARIMA; if fails, fit on last 30 days of data (fast)."""
+    """Load SARIMA; if fails, fit on last 30 days of data silently."""
     try:
         model = SARIMAXResults.load("sarima_model.pkl")
         _ = model.get_forecast(steps=1)
         return model
     except:
-        st.warning("Refitting SARIMA (fast) on recent 30 days of data...")
-
-        # Use last 30 days (~720 hours)
         recent_series = data["Global_active_power"].iloc[-30*24:].astype(float)
-
         sarima_model = SARIMAX(recent_series, order=order, seasonal_order=seasonal_order,
                                enforce_stationarity=False, enforce_invertibility=False)
         sarima_model_fit = sarima_model.fit(disp=False)
-
         sarima_model_fit.save("sarima_model.pkl")
         return sarima_model_fit
 
@@ -158,7 +153,7 @@ if mode == "Single Model":
             forecast_series = pd.Series(preds.values, index=forecast_idx)
 
             mae = mean_absolute_error(test["Global_active_power"], forecast_series[:len(test)])
-            rmse = mean_squared_error(test["Global_active_power"], forecast_series[:len(test)], squared=False)
+            rmse = np.sqrt(mean_squared_error(test["Global_active_power"], forecast_series[:len(test)]))
 
             plt.figure(figsize=(12,5))
             plt.plot(history.index, history["Global_active_power"], label="Actual")
@@ -176,7 +171,7 @@ if mode == "Single Model":
             forecast.set_index("ds", inplace=True)
 
             mae = mean_absolute_error(test["Global_active_power"], forecast["yhat"][:len(test)])
-            rmse = mean_squared_error(test["Global_active_power"], forecast["yhat"][:len(test)], squared=False)
+            rmse = np.sqrt(mean_squared_error(test["Global_active_power"], forecast["yhat"][:len(test)]))
 
             plt.figure(figsize=(12,5))
             plt.plot(history.index, history["Global_active_power"], label="Actual")
@@ -192,7 +187,7 @@ if mode == "Single Model":
                 st.stop()
 
             mae = mean_absolute_error(test["Global_active_power"], preds[:len(test)])
-            rmse = mean_squared_error(test["Global_active_power"], preds[:len(test)], squared=False)
+            rmse = np.sqrt(mean_squared_error(test["Global_active_power"], preds[:len(test)]))
 
             plt.figure(figsize=(12,5))
             plt.plot(history.index, history["Global_active_power"], label="Actual")
@@ -221,7 +216,7 @@ elif mode == "Compare All Models":
                 sarima_preds = pd.Series(preds.values, index=forecast_idx)
                 results["SARIMA"] = {
                     "MAE": mean_absolute_error(test["Global_active_power"], sarima_preds[:len(test)]),
-                    "RMSE": mean_squared_error(test["Global_active_power"], sarima_preds[:len(test)], squared=False)
+                    "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], sarima_preds[:len(test)]))
                 }
 
         # Prophet
@@ -232,7 +227,7 @@ elif mode == "Compare All Models":
                 forecast.set_index("ds", inplace=True)
                 results["Prophet"] = {
                     "MAE": mean_absolute_error(test["Global_active_power"], forecast["yhat"][:len(test)]),
-                    "RMSE": mean_squared_error(test["Global_active_power"], forecast["yhat"][:len(test)], squared=False)
+                    "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], forecast["yhat"][:len(test)]))
                 }
 
         # XGBoost
@@ -242,7 +237,7 @@ elif mode == "Compare All Models":
             if not xgb_preds.empty:
                 results["XGBoost"] = {
                     "MAE": mean_absolute_error(test["Global_active_power"], xgb_preds[:len(test)]),
-                    "RMSE": mean_squared_error(test["Global_active_power"], xgb_preds[:len(test)], squared=False)
+                    "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], xgb_preds[:len(test)]))
                 }
 
         if not results:
