@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import joblib
 import matplotlib.pyplot as plt
+import zipfile
+import os
 from statsmodels.tsa.statespace.sarimax import SARIMAXResults
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
@@ -29,11 +31,19 @@ def load_models():
 models = load_models()
 
 # ==============================
-# Load Data
+# Load Data (from ZIP)
 # ==============================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("household_power_consumption.csv", parse_dates=["datetime"], index_col="datetime")
+    zip_path = "household_power_consumption.zip"
+    csv_name = "household_power_consumption.csv"
+
+    # unzip only if CSV not already extracted
+    if not os.path.exists(csv_name):
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(".")
+
+    df = pd.read_csv(csv_name, parse_dates=["datetime"], index_col="datetime")
     df = df.asfreq("H").fillna(method="ffill")  # hourly resample
     return df
 
