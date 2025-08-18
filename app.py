@@ -252,10 +252,17 @@ if mode == "Single Model":
     selected_model = st.selectbox("Choose a model", ["SARIMA", "Prophet", "XGBoost"])
 
     if st.button("Run Forecast"):
-        plt.figure(figsize=(12,5))
-
-        # plot recent history
-        plt.plot(history.index, history["Global_active_power"], label="Actual", color="black")
+        plt.style.use('dark_background')
+        fig, ax = plt.subplots(figsize=(14, 8))
+        
+        fig.patch.set_facecolor('#1e1e1e')
+        ax.set_facecolor('#2d2d2d')
+        
+        ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5, color='#555555')
+        ax.set_axisbelow(True)
+        
+        ax.plot(history.index, history["Global_active_power"], 
+               label="Actual", color="#00d4ff", linewidth=2.5, alpha=0.9)
 
         if selected_model == "SARIMA" and "SARIMA" in models:
             sarima_series, conf_low, conf_up = forecast_sarima(models["SARIMA"], last_hist_index, horizon)
@@ -269,10 +276,11 @@ if mode == "Single Model":
                     st.success(f"SARIMA → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
                 else:
                     st.warning("SARIMA forecast contains too many NaN values, cannot calculate reliable metrics.")
-                plt.plot(sarima_series.index, sarima_series.values, label="SARIMA")
-                # plot conf interval if available
+                ax.plot(sarima_series.index, sarima_series.values, 
+                       label="SARIMA Forecast", color="#ff6b6b", linewidth=2.5, alpha=0.9)
                 if not conf_low.empty and not conf_up.empty:
-                    plt.fill_between(sarima_series.index, conf_low.values, conf_up.values, alpha=0.25)
+                    ax.fill_between(sarima_series.index, conf_low.values, conf_up.values, 
+                                   alpha=0.2, color="#ff6b6b", label="Confidence Interval")
 
         elif selected_model == "Prophet" and "Prophet" in models:
             prophet_series = forecast_prophet(models["Prophet"], last_hist_index, horizon)
@@ -286,7 +294,8 @@ if mode == "Single Model":
                     st.success(f"Prophet → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
                 else:
                     st.warning("Prophet forecast contains too many NaN values, cannot calculate reliable metrics.")
-                plt.plot(prophet_series.index, prophet_series.values, label="Prophet")
+                ax.plot(prophet_series.index, prophet_series.values, 
+                       label="Prophet Forecast", color="#4ecdc4", linewidth=2.5, alpha=0.9)
 
         elif selected_model == "XGBoost" and "XGBoost" in models:
             xgb_series = forecast_xgb(models["XGBoost"], last_hist_index, horizon, data)
@@ -300,55 +309,82 @@ if mode == "Single Model":
                     st.success(f"XGBoost → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
                 else:
                     st.warning("XGBoost forecast contains too many NaN values, cannot calculate reliable metrics.")
-                plt.plot(xgb_series.index, xgb_series.values, label="XGBoost")
+                ax.plot(xgb_series.index, xgb_series.values, 
+                       label="XGBoost Forecast", color="#ffa726", linewidth=2.5, alpha=0.9)
 
         else:
             st.error("Selected model is not available.")
 
-        plt.legend()
+        ax.set_xlabel("Time", fontsize=14, color='white', fontweight='bold')
+        ax.set_ylabel("Energy Consumption (kW)", fontsize=14, color='white', fontweight='bold')
+        ax.set_title(f"{selected_model} Energy Consumption Forecast", 
+                    fontsize=18, color='white', fontweight='bold', pad=20)
+        
+        legend = ax.legend(loc='upper left', frameon=True, fancybox=True, shadow=True,
+                          fontsize=12, facecolor='#3d3d3d', edgecolor='#555555')
+        legend.get_frame().set_alpha(0.9)
+        for text in legend.get_texts():
+            text.set_color('white')
+        
+        ax.tick_params(axis='both', which='major', labelsize=11, colors='white')
+        ax.spines['bottom'].set_color('#555555')
+        ax.spines['top'].set_color('#555555')
+        ax.spines['right'].set_color('#555555')
+        ax.spines['left'].set_color('#555555')
+        
         plt.tight_layout()
-        st.pyplot(plt)
+        st.pyplot(fig)
 
 # ==============================
 # Compare All Models
 # ==============================
 elif mode == "Compare All Models":
     if st.button("Run Comparison"):
-        plt.figure(figsize=(12,5))
-        plt.plot(history.index, history["Global_active_power"], label="Actual", color="black")
+        plt.style.use('dark_background')
+        fig, ax = plt.subplots(figsize=(14, 8))
+        
+        fig.patch.set_facecolor('#1e1e1e')
+        ax.set_facecolor('#2d2d2d')
+        
+        ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5, color='#555555')
+        ax.set_axisbelow(True)
+        
+        ax.plot(history.index, history["Global_active_power"], 
+               label="Actual", color="#00d4ff", linewidth=3, alpha=0.9)
 
         results = {}
         sarima_series = prophet_series = xgb_series = None
 
-        # SARIMA
         if "SARIMA" in models:
             sarima_series, conf_low, conf_up = forecast_sarima(models["SARIMA"], last_hist_index, horizon)
             if not sarima_series.empty:
-                plt.plot(sarima_series.index, sarima_series.values, label="SARIMA")
+                ax.plot(sarima_series.index, sarima_series.values, 
+                       label="SARIMA", color="#ff6b6b", linewidth=2.5, alpha=0.9)
                 if not conf_low.empty and not conf_up.empty:
-                    plt.fill_between(sarima_series.index, conf_low.values, conf_up.values, alpha=0.15)
+                    ax.fill_between(sarima_series.index, conf_low.values, conf_up.values, 
+                                   alpha=0.15, color="#ff6b6b")
                 forecast_values = sarima_series[:len(test)]
                 actual_values = test["Global_active_power"]
                 mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
                 if mae is not None and rmse is not None:
                     results["SARIMA"] = {"MAE": mae, "RMSE": rmse}
 
-        # Prophet
         if "Prophet" in models:
             prophet_series = forecast_prophet(models["Prophet"], last_hist_index, horizon)
             if not prophet_series.empty:
-                plt.plot(prophet_series.index, prophet_series.values, label="Prophet")
+                ax.plot(prophet_series.index, prophet_series.values, 
+                       label="Prophet", color="#4ecdc4", linewidth=2.5, alpha=0.9)
                 forecast_values = prophet_series[:len(test)]
                 actual_values = test["Global_active_power"]
                 mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
                 if mae is not None and rmse is not None:
                     results["Prophet"] = {"MAE": mae, "RMSE": rmse}
 
-        # XGBoost
         if "XGBoost" in models:
             xgb_series = forecast_xgb(models["XGBoost"], last_hist_index, horizon, data)
             if not xgb_series.empty:
-                plt.plot(xgb_series.index, xgb_series.values, label="XGBoost")
+                ax.plot(xgb_series.index, xgb_series.values, 
+                       label="XGBoost", color="#ffa726", linewidth=2.5, alpha=0.9)
                 forecast_values = xgb_series[:len(test)]
                 actual_values = test["Global_active_power"]
                 mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
@@ -359,11 +395,26 @@ elif mode == "Compare All Models":
             st.error("No models produced valid forecasts.")
             st.stop()
 
-        plt.legend()
+        ax.set_xlabel("Time", fontsize=14, color='white', fontweight='bold')
+        ax.set_ylabel("Energy Consumption (kW)", fontsize=14, color='white', fontweight='bold')
+        ax.set_title("Energy Consumption Forecast Comparison", 
+                    fontsize=18, color='white', fontweight='bold', pad=20)
+        
+        legend = ax.legend(loc='upper left', frameon=True, fancybox=True, shadow=True,
+                          fontsize=12, facecolor='#3d3d3d', edgecolor='#555555')
+        legend.get_frame().set_alpha(0.9)
+        for text in legend.get_texts():
+            text.set_color('white')
+        
+        ax.tick_params(axis='both', which='major', labelsize=11, colors='white')
+        ax.spines['bottom'].set_color('#555555')
+        ax.spines['top'].set_color('#555555')
+        ax.spines['right'].set_color('#555555')
+        ax.spines['left'].set_color('#555555')
+        
         plt.tight_layout()
-        st.pyplot(plt)
+        st.pyplot(fig)
 
-        # Show comparison table
         results_df = pd.DataFrame(results).T
         def highlight_best(s):
             is_min = s == s.min()
