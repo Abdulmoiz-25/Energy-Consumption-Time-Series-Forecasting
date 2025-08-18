@@ -159,17 +159,30 @@ def forecast_prophet(model, last_hist_index, steps):
     """
     forecast_idx = make_forecast_index(last_hist_index, steps)
     try:
+        # Create future dataframe with proper alignment
         future = model.make_future_dataframe(periods=steps, freq="H")
         forecast_df = model.predict(future)
-        # take last `steps` rows and set index to 'ds'
-        last_forecast = forecast_df.tail(steps)[["ds", "yhat"]].copy()
-        last_forecast.set_index("ds", inplace=True)
-        # Reindex to our forecast_idx to ensure alignment (interpolate if needed)
-        last_forecast = last_forecast.reindex(forecast_idx)
-        # If some values missing, forward/backfill
-        last_forecast["yhat"].fillna(method="ffill", inplace=True)
-        last_forecast["yhat"].fillna(method="bfill", inplace=True)
-        return pd.Series(last_forecast["yhat"].values, index=forecast_idx)
+        
+        # Get the last `steps` predictions (the future predictions)
+        future_predictions = forecast_df.tail(steps).copy()
+        
+        # Instead of reindexing which can create NaN, directly map the values
+        # The Prophet predictions should be in chronological order
+        if len(future_predictions) == steps:
+            # Direct mapping of values to our forecast index
+            forecast_values = future_predictions["yhat"].values
+            forecast_series = pd.Series(forecast_values, index=forecast_idx)
+        else:
+            # Fallback: interpolate if lengths don't match
+            future_predictions.set_index("ds", inplace=True)
+            reindexed = future_predictions["yhat"].reindex(forecast_idx, method='nearest')
+            # Fill any remaining NaN values with the last valid prediction
+            if reindexed.isna().any():
+                last_valid = future_predictions["yhat"].iloc[-1]
+                reindexed = reindexed.fillna(last_valid)
+            forecast_series = reindexed
+        
+        return forecast_series
     except Exception as e:
         st.error(f"Prophet forecast error: {e}")
         return pd.Series(dtype=float)
