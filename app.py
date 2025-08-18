@@ -222,33 +222,48 @@ if mode == "Single Model":
             if sarima_series.empty:
                 st.error("SARIMA failed to produce forecast.")
             else:
-                mae = mean_absolute_error(test["Global_active_power"], sarima_series[:len(test)])
-                rmse = np.sqrt(mean_squared_error(test["Global_active_power"], sarima_series[:len(test)]))
+                forecast_values = sarima_series[:len(test)]
+                actual_values = test["Global_active_power"]
+                if not forecast_values.isna().any() and not actual_values.isna().any():
+                    mae = mean_absolute_error(actual_values, forecast_values)
+                    rmse = np.sqrt(mean_squared_error(actual_values, forecast_values))
+                    st.success(f"SARIMA → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
+                else:
+                    st.warning("SARIMA forecast contains NaN values, cannot calculate metrics.")
                 plt.plot(sarima_series.index, sarima_series.values, label="SARIMA")
                 # plot conf interval if available
                 if not conf_low.empty and not conf_up.empty:
                     plt.fill_between(sarima_series.index, conf_low.values, conf_up.values, alpha=0.25)
-                st.success(f"SARIMA → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
 
         elif selected_model == "Prophet" and "Prophet" in models:
             prophet_series = forecast_prophet(models["Prophet"], last_hist_index, horizon)
             if prophet_series.empty:
                 st.error("Prophet failed to produce forecast.")
             else:
-                mae = mean_absolute_error(test["Global_active_power"], prophet_series[:len(test)])
-                rmse = np.sqrt(mean_squared_error(test["Global_active_power"], prophet_series[:len(test)]))
+                forecast_values = prophet_series[:len(test)]
+                actual_values = test["Global_active_power"]
+                if not forecast_values.isna().any() and not actual_values.isna().any():
+                    mae = mean_absolute_error(actual_values, forecast_values)
+                    rmse = np.sqrt(mean_squared_error(actual_values, forecast_values))
+                    st.success(f"Prophet → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
+                else:
+                    st.warning("Prophet forecast contains NaN values, cannot calculate metrics.")
                 plt.plot(prophet_series.index, prophet_series.values, label="Prophet")
-                st.success(f"Prophet → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
 
         elif selected_model == "XGBoost" and "XGBoost" in models:
             xgb_series = forecast_xgb(models["XGBoost"], last_hist_index, horizon, data)
             if xgb_series.empty:
                 st.error("XGBoost failed to produce forecast.")
             else:
-                mae = mean_absolute_error(test["Global_active_power"], xgb_series[:len(test)])
-                rmse = np.sqrt(mean_squared_error(test["Global_active_power"], xgb_series[:len(test)]))
+                forecast_values = xgb_series[:len(test)]
+                actual_values = test["Global_active_power"]
+                if not forecast_values.isna().any() and not actual_values.isna().any():
+                    mae = mean_absolute_error(actual_values, forecast_values)
+                    rmse = np.sqrt(mean_squared_error(actual_values, forecast_values))
+                    st.success(f"XGBoost → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
+                else:
+                    st.warning("XGBoost forecast contains NaN values, cannot calculate metrics.")
                 plt.plot(xgb_series.index, xgb_series.values, label="XGBoost")
-                st.success(f"XGBoost → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
 
         else:
             st.error("Selected model is not available.")
@@ -275,30 +290,39 @@ elif mode == "Compare All Models":
                 plt.plot(sarima_series.index, sarima_series.values, label="SARIMA")
                 if not conf_low.empty and not conf_up.empty:
                     plt.fill_between(sarima_series.index, conf_low.values, conf_up.values, alpha=0.15)
-                results["SARIMA"] = {
-                    "MAE": mean_absolute_error(test["Global_active_power"], sarima_series[:len(test)]),
-                    "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], sarima_series[:len(test)]))
-                }
+                forecast_values = sarima_series[:len(test)]
+                actual_values = test["Global_active_power"]
+                if not forecast_values.isna().any() and not actual_values.isna().any():
+                    results["SARIMA"] = {
+                        "MAE": mean_absolute_error(actual_values, forecast_values),
+                        "RMSE": np.sqrt(mean_squared_error(actual_values, forecast_values))
+                    }
 
         # Prophet
         if "Prophet" in models:
             prophet_series = forecast_prophet(models["Prophet"], last_hist_index, horizon)
             if not prophet_series.empty:
                 plt.plot(prophet_series.index, prophet_series.values, label="Prophet")
-                results["Prophet"] = {
-                    "MAE": mean_absolute_error(test["Global_active_power"], prophet_series[:len(test)]),
-                    "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], prophet_series[:len(test)]))
-                }
+                forecast_values = prophet_series[:len(test)]
+                actual_values = test["Global_active_power"]
+                if not forecast_values.isna().any() and not actual_values.isna().any():
+                    results["Prophet"] = {
+                        "MAE": mean_absolute_error(actual_values, forecast_values),
+                        "RMSE": np.sqrt(mean_squared_error(actual_values, forecast_values))
+                    }
 
         # XGBoost
         if "XGBoost" in models:
             xgb_series = forecast_xgb(models["XGBoost"], last_hist_index, horizon, data)
             if not xgb_series.empty:
                 plt.plot(xgb_series.index, xgb_series.values, label="XGBoost")
-                results["XGBoost"] = {
-                    "MAE": mean_absolute_error(test["Global_active_power"], xgb_series[:len(test)]),
-                    "RMSE": np.sqrt(mean_squared_error(test["Global_active_power"], xgb_series[:len(test)]))
-                }
+                forecast_values = xgb_series[:len(test)]
+                actual_values = test["Global_active_power"]
+                if not forecast_values.isna().any() and not actual_values.isna().any():
+                    results["XGBoost"] = {
+                        "MAE": mean_absolute_error(actual_values, forecast_values),
+                        "RMSE": np.sqrt(mean_squared_error(actual_values, forecast_values))
+                    }
 
         if not results:
             st.error("No models produced valid forecasts.")
