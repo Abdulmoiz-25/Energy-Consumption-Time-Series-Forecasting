@@ -99,11 +99,6 @@ Forecast household energy consumption using **advanced time series models** to p
 
 ---
 
-## ✅ Technical Highlights  
-This project demonstrates **production-ready time series forecasting**: automated data pipeline, robust model handling, advanced visualization, comprehensive error management, and interactive deployment. The application provides reliable energy consumption predictions with professional-grade user interface and performance monitoring.
-
----
-
 ## 📚 Model Details  
 
 ### 🔄 SARIMA (Seasonal AutoRegressive Integrated Moving Average)  
