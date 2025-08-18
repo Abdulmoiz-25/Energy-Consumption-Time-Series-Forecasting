@@ -230,6 +230,30 @@ def forecast_xgb(model, last_hist_index, steps, df):
         return pd.Series(dtype=float)
 
 # ==============================
+# Helper function to clean forecast data for plotting
+# ==============================
+def clean_forecast_for_plotting(forecast_series):
+    """
+    Clean forecast series for plotting by removing NaN values and ensuring continuity.
+    Returns cleaned series with no gaps.
+    """
+    if forecast_series.empty:
+        return forecast_series
+    
+    # Remove NaN values
+    cleaned = forecast_series.dropna()
+    
+    # If we have some valid data but with gaps, interpolate small gaps
+    if len(cleaned) > 0 and len(cleaned) < len(forecast_series):
+        # Interpolate to fill small gaps (up to 3 consecutive NaN values)
+        interpolated = forecast_series.interpolate(method='linear', limit=3)
+        # If still has NaN, use forward fill then backward fill
+        interpolated = interpolated.fillna(method='ffill').fillna(method='bfill')
+        return interpolated.dropna()
+    
+    return cleaned
+
+# ==============================
 # Streamlit UI
 # ==============================
 st.title("⚡ Energy Consumption Forecasting App")
@@ -269,6 +293,17 @@ if mode == "Single Model":
             if sarima_series.empty:
                 st.error("SARIMA failed to produce forecast.")
             else:
+                cleaned_sarima = clean_forecast_for_plotting(sarima_series)
+                if not cleaned_sarima.empty:
+                    ax.plot(cleaned_sarima.index, cleaned_sarima.values, 
+                           label="SARIMA Forecast", color="#ff6b6b", linewidth=2.5, alpha=0.9)
+                    if not conf_low.empty and not conf_up.empty:
+                        cleaned_conf_low = clean_forecast_for_plotting(conf_low)
+                        cleaned_conf_up = clean_forecast_for_plotting(conf_up)
+                        if not cleaned_conf_low.empty and not cleaned_conf_up.empty:
+                            ax.fill_between(cleaned_sarima.index, cleaned_conf_low.values, cleaned_conf_up.values, 
+                                           alpha=0.2, color="#ff6b6b", label="Confidence Interval")
+                
                 forecast_values = sarima_series[:len(test)]
                 actual_values = test["Global_active_power"]
                 mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
@@ -276,17 +311,17 @@ if mode == "Single Model":
                     st.success(f"SARIMA → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
                 else:
                     st.warning("SARIMA forecast contains too many NaN values, cannot calculate reliable metrics.")
-                ax.plot(sarima_series.index, sarima_series.values, 
-                       label="SARIMA Forecast", color="#ff6b6b", linewidth=2.5, alpha=0.9)
-                if not conf_low.empty and not conf_up.empty:
-                    ax.fill_between(sarima_series.index, conf_low.values, conf_up.values, 
-                                   alpha=0.2, color="#ff6b6b", label="Confidence Interval")
 
         elif selected_model == "Prophet" and "Prophet" in models:
             prophet_series = forecast_prophet(models["Prophet"], last_hist_index, horizon)
             if prophet_series.empty:
                 st.error("Prophet failed to produce forecast.")
             else:
+                cleaned_prophet = clean_forecast_for_plotting(prophet_series)
+                if not cleaned_prophet.empty:
+                    ax.plot(cleaned_prophet.index, cleaned_prophet.values, 
+                           label="Prophet Forecast", color="#4ecdc4", linewidth=2.5, alpha=0.9)
+                
                 forecast_values = prophet_series[:len(test)]
                 actual_values = test["Global_active_power"]
                 mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
@@ -294,14 +329,17 @@ if mode == "Single Model":
                     st.success(f"Prophet → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
                 else:
                     st.warning("Prophet forecast contains too many NaN values, cannot calculate reliable metrics.")
-                ax.plot(prophet_series.index, prophet_series.values, 
-                       label="Prophet Forecast", color="#4ecdc4", linewidth=2.5, alpha=0.9)
 
         elif selected_model == "XGBoost" and "XGBoost" in models:
             xgb_series = forecast_xgb(models["XGBoost"], last_hist_index, horizon, data)
             if xgb_series.empty:
                 st.error("XGBoost failed to produce forecast.")
             else:
+                cleaned_xgb = clean_forecast_for_plotting(xgb_series)
+                if not cleaned_xgb.empty:
+                    ax.plot(cleaned_xgb.index, cleaned_xgb.values, 
+                           label="XGBoost Forecast", color="#ffa726", linewidth=2.5, alpha=0.9)
+                
                 forecast_values = xgb_series[:len(test)]
                 actual_values = test["Global_active_power"]
                 mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
@@ -309,8 +347,6 @@ if mode == "Single Model":
                     st.success(f"XGBoost → MAE: {mae:.3f}, RMSE: {rmse:.3f}")
                 else:
                     st.warning("XGBoost forecast contains too many NaN values, cannot calculate reliable metrics.")
-                ax.plot(xgb_series.index, xgb_series.values, 
-                       label="XGBoost Forecast", color="#ffa726", linewidth=2.5, alpha=0.9)
 
         else:
             st.error("Selected model is not available.")
@@ -358,11 +394,17 @@ elif mode == "Compare All Models":
         if "SARIMA" in models:
             sarima_series, conf_low, conf_up = forecast_sarima(models["SARIMA"], last_hist_index, horizon)
             if not sarima_series.empty:
-                ax.plot(sarima_series.index, sarima_series.values, 
-                       label="SARIMA", color="#ff6b6b", linewidth=2.5, alpha=0.9)
-                if not conf_low.empty and not conf_up.empty:
-                    ax.fill_between(sarima_series.index, conf_low.values, conf_up.values, 
-                                   alpha=0.15, color="#ff6b6b")
+                cleaned_sarima = clean_forecast_for_plotting(sarima_series)
+                if not cleaned_sarima.empty:
+                    ax.plot(cleaned_sarima.index, cleaned_sarima.values, 
+                           label="SARIMA", color="#ff6b6b", linewidth=2.5, alpha=0.9)
+                    if not conf_low.empty and not conf_up.empty:
+                        cleaned_conf_low = clean_forecast_for_plotting(conf_low)
+                        cleaned_conf_up = clean_forecast_for_plotting(conf_up)
+                        if not cleaned_conf_low.empty and not cleaned_conf_up.empty:
+                            ax.fill_between(cleaned_sarima.index, cleaned_conf_low.values, cleaned_conf_up.values, 
+                                           alpha=0.15, color="#ff6b6b")
+                
                 forecast_values = sarima_series[:len(test)]
                 actual_values = test["Global_active_power"]
                 mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
@@ -372,8 +414,11 @@ elif mode == "Compare All Models":
         if "Prophet" in models:
             prophet_series = forecast_prophet(models["Prophet"], last_hist_index, horizon)
             if not prophet_series.empty:
-                ax.plot(prophet_series.index, prophet_series.values, 
-                       label="Prophet", color="#4ecdc4", linewidth=2.5, alpha=0.9)
+                cleaned_prophet = clean_forecast_for_plotting(prophet_series)
+                if not cleaned_prophet.empty:
+                    ax.plot(cleaned_prophet.index, cleaned_prophet.values, 
+                           label="Prophet", color="#4ecdc4", linewidth=2.5, alpha=0.9)
+                
                 forecast_values = prophet_series[:len(test)]
                 actual_values = test["Global_active_power"]
                 mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
@@ -383,8 +428,11 @@ elif mode == "Compare All Models":
         if "XGBoost" in models:
             xgb_series = forecast_xgb(models["XGBoost"], last_hist_index, horizon, data)
             if not xgb_series.empty:
-                ax.plot(xgb_series.index, xgb_series.values, 
-                       label="XGBoost", color="#ffa726", linewidth=2.5, alpha=0.9)
+                cleaned_xgb = clean_forecast_for_plotting(xgb_series)
+                if not cleaned_xgb.empty:
+                    ax.plot(cleaned_xgb.index, cleaned_xgb.values, 
+                           label="XGBoost", color="#ffa726", linewidth=2.5, alpha=0.9)
+                
                 forecast_values = xgb_series[:len(test)]
                 actual_values = test["Global_active_power"]
                 mae, rmse = safe_calculate_metrics(actual_values, forecast_values)
