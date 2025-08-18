@@ -12,7 +12,6 @@ Forecast household energy consumption using **advanced time series models** to p
   - Global Active Power (household global minute-averaged active power in kilowatts)
   - Date and Time (minute-level timestamps)
   - Various electrical measurements and sub-metering data
-- **Format**: ZIP file containing semicolon-separated text file
 - **Frequency**: Converted to hourly data for forecasting
 
 ---
@@ -102,26 +101,6 @@ Forecast household energy consumption using **advanced time series models** to p
 
 ## ✅ Technical Highlights  
 This project demonstrates **production-ready time series forecasting**: automated data pipeline, robust model handling, advanced visualization, comprehensive error management, and interactive deployment. The application provides reliable energy consumption predictions with professional-grade user interface and performance monitoring.
-
----
-
-## 🚀 Getting Started  
-
-### Prerequisites  
-\\\bash
-pip install streamlit pandas numpy matplotlib scikit-learn statsmodels prophet xgboost joblib
-\\\
-
-### Running the Application  
-\\\bash
-streamlit run app.py
-\\\
-
-### Required Files  
-- `household power consumption.zip` - Dataset file  
-- `sarima_model.pkl` - Pre-trained SARIMA model (optional)  
-- `prophet_model.pkl` - Pre-trained Prophet model (optional)  
-- `xgb_model.pkl` - Pre-trained XGBoost model (optional)  
 
 ---
 
