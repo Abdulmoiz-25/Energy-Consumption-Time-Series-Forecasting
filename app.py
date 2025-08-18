@@ -55,23 +55,25 @@ if data.empty:
     st.stop()
 
 # ==============================
-# Load / Refit SARIMA
+# Load / Fast Refit SARIMA
 # ==============================
 @st.cache_resource
 def get_sarima_model(data, seasonal_order=(1,1,1,24), order=(1,1,1)):
-    """Try to load SARIMA; if fails, refit on data."""
+    """Load SARIMA; if fails, fit on last 30 days of data (fast)."""
     try:
         model = SARIMAXResults.load("sarima_model.pkl")
-        # Test forecast to ensure model is compatible
         _ = model.get_forecast(steps=1)
         return model
     except:
-        st.warning("Refitting SARIMA model on current dataset...")
-        # Fit new SARIMA model
-        series = data["Global_active_power"].astype(float)
-        sarima_model = SARIMAX(series, order=order, seasonal_order=seasonal_order,
+        st.warning("Refitting SARIMA (fast) on recent 30 days of data...")
+
+        # Use last 30 days (~720 hours)
+        recent_series = data["Global_active_power"].iloc[-30*24:].astype(float)
+
+        sarima_model = SARIMAX(recent_series, order=order, seasonal_order=seasonal_order,
                                enforce_stationarity=False, enforce_invertibility=False)
         sarima_model_fit = sarima_model.fit(disp=False)
+
         sarima_model_fit.save("sarima_model.pkl")
         return sarima_model_fit
 
