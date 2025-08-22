@@ -12,7 +12,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 # Streamlit Page Configuration
 # -----------------------------
 st.set_page_config(
-    page_title="⚡ Energy Consumption Forecasting App",  # Browser tab title
+    page_title="Energy Consumption Forecasting App",  # Browser tab title
 )
 
 
@@ -501,5 +501,6 @@ elif mode == "Compare All Models":
         styled_df = results_df.style.apply(highlight_best, subset=["RMSE"])
         st.subheader("📊 Model Comparison (Last Horizon)")
         st.dataframe(styled_df)
+
 
 
